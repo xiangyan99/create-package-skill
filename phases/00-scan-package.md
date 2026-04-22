@@ -2,8 +2,6 @@
 
 > 📍 **Phase 0 — Scan Package** | Detect the package's architecture, customization patterns, and key files.
 
-> 💡 If you need a deep, dimension-by-dimension analysis, run the `sdk-analyzer` skill first. This phase captures the high-level profile needed to write a good SKILL.md.
-
 ## Step 1 — Identify the Package
 
 Ask the user: "Which SDK package should I create a skill for?"
