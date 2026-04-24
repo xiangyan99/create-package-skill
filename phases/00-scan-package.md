@@ -20,6 +20,7 @@ Scan the package using the checklist below. Use file_search / grep_search / read
 
 1. **Code generation toolchain**:
    - `tsp-location.yaml` → TypeSpec-generated package. Note the spec directory and commit SHA.
+   - `_metadata.json` → if present, record that `apiVersion` lives here (the skill will reconcile it against the hand-maintained `ApiVersion` enum).
    - `swagger/README.md` → legacy autorest-generated (mgmt packages typically).
    - Neither → hand-written package (rare).
 
@@ -44,11 +45,17 @@ Scan the package using the checklist below. Use file_search / grep_search / read
 
 7. **Async parity**: For each non-empty sync customization file, check whether the async counterpart exists under `aio/`. Record `identical`, `equivalent`, `divergent`, `sync-only`, or `async-only`.
 
-8. **Service API versions**: Search for a `_ApiVersion` enum or `api_version` constants under `<namespace-root>` (often inside `_generated/`). Record the versions available, but do **not** hard-code the list into the skill — point to the source file.
+8. **Service API versions**: Search for an `ApiVersion` enum or `api_version` constants under `<namespace-root>` (often inside `_patch.py` itself, not `_generated/`). Record the source file path, but do **not** hard-code the list of versions into the skill — point to the source file.
 
-9. **Tests**: Check `tests/` directory. Look for `conftest.py`, `*test_base*.py`, `assets.json` (recorded tests via Test Proxy), `testpreparer*.py`. Note whether tests are live, recorded, or both.
+9. **Hand-authored named classes**: Grep for `class .*Buffered|class .*Batching|class .*Sender|class .*Paged|class .*PageIterator` under `<namespace-root>`. These are hand-authored utilities that the skill must name in its Customization Patterns Reference.
 
-10. **Management vs data plane**: If package name starts with `azure-mgmt-` → management-plane rules apply (see copilot-instructions). Otherwise data-plane.
+10. **Top public symbols (for import smoke tests)**: Read the top-level `__init__.py` and `aio/__init__.py`. Record up to 3–5 most important public names (clients, senders, key models/enums) so Phase 1 can generate accurate `python -c "from <ns> import <X>"` commands.
+
+11. **Tests**: Check `tests/` directory. Look for `conftest.py`, `*test_base*.py`, `assets.json` (recorded tests via Test Proxy), `testpreparer*.py`. Note whether tests are live, recorded, or both.
+
+12. **Documentation surfaces**: Check for `CHANGELOG.md` and `README.md` at the package root. Both are near-universal; the skill's Step 8 (Update Documentation and Samples) will reference them.
+
+13. **Management vs data plane**: If package name starts with `azure-mgmt-` → management-plane rules apply (see copilot-instructions). Otherwise data-plane.
 
 ## Step 3 — Present Package Profile
 
@@ -62,13 +69,18 @@ Print a concise summary:
 | Path | `sdk/<service>/<package-name>` |
 | Plane | data / mgmt |
 | Generated | TypeSpec (`tsp-location.yaml`) / autorest (`swagger/README.md`) / hand-written |
+| Metadata | `_metadata.json` present: Y/N |
 | Layout | nested (`_generated/`) / inline (header-based) |
-| Non-empty `_patch.py` files | List which levels have customizations (top / models / operations / aio / aio/operations) |
+| Non-empty `_patch.py` files | List which levels have customizations (top / models / operations / aio / aio/operations / indexes…) |
 | Custom utility modules | N hand-written `.py` files outside `_patch.py` |
+| Hand-authored named classes | e.g., `SearchIndexingBufferedSender`, `SearchItemPaged` (or `none`) |
+| Top public symbols | List of 3–5 names used for Phase 1 import smoke tests |
 | Public API surface | Notes on re-exports, renames, omissions |
 | Async parity | summary (identical / divergent / sync-only / async-only) |
-| API versions | Source file + count (do not enumerate) |
+| `ApiVersion` enum | source file + present Y/N |
 | Tests | Unit: Y, Live: Y/N, Recorded (assets.json): Y/N |
+| Docs | `CHANGELOG.md`: Y/N, `README.md`: Y/N |
+| Suggested structure | Option A (step-by-step) / Option B (reference manual) |
 
 ## Step 4 — DECIDE
 

@@ -1,90 +1,220 @@
 # Phase 1: Scaffold SKILL.md 📝
 
-> 📍 **Phase 1 — Scaffold SKILL.md** | Generate the main skill file with key sections.
+> 📍 **Phase 1 — Scaffold SKILL.md** | Generate the main skill file.
 
-> 📖 Read `references/skill-template.md` for the full template.
+> 📖 Read `references/skill-template.md` for the full template and the two allowed structure options.
 
 Using the package profile from Phase 0, generate a `SKILL.md` at:
 ```
 sdk/<service>/<package-name>/.github/skills/<package-name>/SKILL.md
 ```
 
-The skill directory name MUST match the Python distribution package name (e.g., `azure-search-documents`, `azure-ai-projects`, `azure-mgmt-appconfiguration`). This is both the `name` in frontmatter and the directory name (vally lint enforces the match).
+The skill directory name MUST match the Python distribution package name
+(e.g., `azure-search-documents`, `azure-ai-projects`, `azure-mgmt-appconfiguration`).
+This is both the `name` in frontmatter and the directory name (vally lint enforces the match).
 
-## Content Principles
+## Structure decision
 
-- **Keep it static.** Document architecture, design patterns, and the convenience layer — things that rarely change. Do NOT include version numbers, current API versions, or anything that changes every release. The skill should be valid for years, not months.
-- **Point to source code, not hardcoded lists.** When referencing things that change (API version enums, method names, symbol exports), point the agent to the authoritative source file instead of enumerating values in the skill.
-- **Prefer TypeSpec-level customizations over `_patch.py`.** When documenting customization patterns, always note: "Use `_patch.py` when TypeSpec cannot express the desired behavior, or when the behavior is Python-specific. For TypeSpec-level customizations (preferred when possible), see the [typespec-python emitter options](https://github.com/Azure/autorest.python/blob/main/packages/typespec-python/README.md) and the [Python SDK design guidelines](https://azure.github.io/azure-sdk/python_design.html)."
-- **Don't re-document MCP tools.** `azsdk_package_generate_code`, `azsdk_package_build_code`, `azsdk_package_run_check`, `azsdk_package_run_tests`, and `azsdk_customized_code_update` already handle generation, build, customization application, and testing. The package skill adds only what those tools don't know.
-- **Focus on the convenience layer.** The highest-value content is: how is the package designed, what convenience patterns exist in `_patch.py` and utility modules, what does the agent need to know to write/maintain the convenience layer correctly, how is async parity maintained.
+From the Phase 0 profile, pick the structure option that fits:
 
-## Required Sections
+- **Option A — step-by-step workflow** (preferred when the package has multiple non-empty `_patch.py` files, hand-authored utility modules, or a hand-maintained `ApiVersion` enum). This is how `azure-search-documents` is structured.
+- **Option B — reference manual** (simpler packages with few customizations; use when Option A would feel padded).
 
-### 1. Frontmatter
+Ask the user to confirm the choice, defaulting to A when any of these are true: >=2 non-empty `_patch.py`; `ApiVersion`/`DEFAULT_VERSION` present in `_patch.py`; hand-authored `Buffered`/`Batching`/`Paged` class detected.
+
+## Content principles (recap)
+
+- **Keep it static** regarding release state (no version numbers, no current default API version) — but **do** include copy-pasteable commands the agent will need.
+- **Point to source** for mutable things (API version enum → point at `_patch.py`; generator target → point at `_metadata.json`).
+- **Prefer TypeSpec over `_patch.py`** when the customization is expressible in the spec — note this in the customization patterns section.
+- **Include MCP tool invocations** where appropriate (`azsdk_package_generate_code`, `azsdk_package_run_check`, etc.), but also include the direct CLI equivalents (`tsp-client update`, `azpysdk mypy`, `azpysdk pylint`) because agents routinely run those too.
+
+## Required sections — Option A (step-by-step)
+
+### Frontmatter
 
 ```yaml
 ---
 name: <package-name>
-description: '<Brief description>. WHEN: regenerate <package-name>; modify <package-name>; fix <package-name> bug; add <package-name> feature; <package-name> tsp-client update.'
+description: '<Brief description>. WHEN: regenerate <package-name>; modify <package-name>; fix <package-name> bug; add <package-name> feature; <package-name> tsp-client update; edit <package-name> _patch.py.'
 ---
 ```
 
-Use semicolons for trigger phrases (YAML-safe). Include the distribution package name in every trigger.
+Semicolons separate triggers (YAML-safe). Every trigger should include the distribution package name.
 
-### 2. Common Pitfalls (MUST be first section after heading)
+### Intro (2–4 sentences)
 
-List the most dangerous mistakes:
+State the core premise in plain language:
+- The generator never touches `_patch.py`, so customizations survive regeneration.
+- But `_patch.py` imports from generated modules, which DO change.
+- A rename / new parameter / removed enum value silently breaks `_patch.py`.
+- The following steps catch those breaks.
 
-- **Never hand-edit generated files** — files with the header `"Code generated by Microsoft (R) Python Code Generator"` (or anything inside a `_generated/` directory) are overwritten on `tsp-client update` / `azsdk_package_generate_code`. All modifications go through the appropriate `_patch.py` file, sibling hand-written modules, or TypeSpec decorators.
-- If the package has non-empty `_patch.py` files: **"Check `_patch.py` FIRST when generated files appear broken or missing members — the public shape is shaped by patches, not by `_generated/` alone."** List the specific `_patch.py` files present.
-- **Maintain async parity.** Every sync customization in `_patch.py` / `operations/_patch.py` must have an equivalent in `aio/_patch.py` / `aio/operations/_patch.py`. Missing async counterparts break users' async code paths silently.
-- **`__init__.py` is the public API boundary.** Symbols re-exported from `_patch.py` override anything re-exported from `_generated/`. When adding a new public class/function in `_patch.py`, also add it to `__all__` in `_patch.py` AND ensure the containing `__init__.py` imports from `_patch.py` after the generated imports (the `_patch_sdk()` call, if present, handles this).
-- **Inline-layout gotcha:** If the package has no `_generated/` directory, generated files are mixed into the namespace root. Identify them by the header comment, not by location. Accidentally editing a header-marked file is the most common mistake in this layout.
-- Any package-specific gotchas found during scanning.
+### Step 1 — Run Regeneration
 
-### 3. Architecture
+Minimal shell block with `cd sdk/<service>/<package-name>`, then `tsp-client update`
+(or `azsdk_package_generate_code`). Mention updating `tsp-location.yaml` with the new
+spec commit SHA, and `_metadata.json` if the API version changed.
 
-- Namespace layout with generated vs hand-written distinction (nested `_generated/` vs inline layout)
-- Customization mechanism: which `_patch.py` files are non-empty and what each covers
-- Hand-written utility modules and their role (policies, helpers, constants)
-- Sync/async tree mirroring
+### Step 2 — Verify Imports in All `_patch.py` Files
 
-### 4. After Regeneration
+Provide import smoke-test commands for the top public symbols (fill from Phase 0 scan):
 
-**Do NOT re-document the generation/build/test workflow.** `azsdk_package_generate_code`, `azsdk_package_build_code`, `azsdk_package_run_check`, `azsdk_package_run_tests`, and `azsdk_customized_code_update` handle that. The package skill adds only:
+```bash
+python -c "from <namespace> import <TopClient>"
+python -c "from <namespace>.aio import <TopClient>"
+python -c "from <namespace>.<submod> import <KeyModel>, <KeyEnum>"
+```
 
-- **Error categorization table** — which file to fix based on error type (generated file → regenerate or adjust TypeSpec; `_patch.py` → update customization; hand-written utility → update directly).
-- **Package-specific customization patterns** — what each `_patch.py` does and when it needs updating after the spec changes.
-- **API version management** — how the API version enum is exposed/overridden and how `_patch.py` interacts with it.
-- **Breaking change detection** — what to look for after spec changes (removed symbols, renamed operations, changed signatures in generated code that `_patch.py` references).
+List every non-empty `_patch.py` file in a tree diagram with its role (one line each).
+Tell the agent: if any import fails, a generated class/enum was renamed or removed —
+check `references/customizations.md` for the exact import each `_patch.py` depends on.
 
-Note: The `azsdk_customized_code_update` MCP tool handles many customization fixes automatically (TypeSpec decorators first, then code patches). The package skill documents what that tool does NOT know — package-specific patterns.
+### Step 3 — Check ApiVersion (only if `ApiVersion` enum exists in a `_patch.py`)
 
-### 5. Post-Regeneration Customizations (if non-empty `_patch.py` files exist)
+Concrete commands to reconcile `_metadata.json` with the hand-maintained enum:
 
-Add the guardrail: "Use `_patch.py` when TypeSpec cannot express the desired behavior, or when the behavior is Python-specific. For TypeSpec-level customizations (preferred when possible), see the [typespec-python emitter docs](https://github.com/Azure/autorest.python/blob/main/packages/typespec-python/README.md)."
+```bash
+python -c "import json; print(json.load(open('_metadata.json'))['apiVersion'])"
+grep -A 20 'class ApiVersion' <path-to-_patch.py>
+grep 'DEFAULT_VERSION' <path-to-_patch.py>
+```
 
-For each non-empty `_patch.py` file, document:
-- Which classes/functions it defines or overrides
-- What each customization does and why
-- What in the generated code it depends on (so a regeneration diff reveals breakage)
-- Whether it could be replaced by a TypeSpec-level customization
-- Its async counterpart (if under `aio/`, describe parity; if under sync, link to the async partner)
+If the generated API version is not in the enum: add the member, update `DEFAULT_VERSION`,
+update the docstring. Include a round-trip verification:
 
-**Do NOT include "how to add a new customization" boilerplate** (e.g., `pip install -e .`, `tox run -e pylint`, write-compile-verify loops). Those are covered by the MCP tools and the `tool_usage_guide.md` doc. Only document what is unique to this package's customization layer.
+```bash
+python -c "from <namespace>._patch import ApiVersion, DEFAULT_VERSION; print(DEFAULT_VERSION.value)"
+```
 
-### 6. Testing Notes
+### Step 4 — Expose New Generated Methods Through `_patch.py`
 
-How to run tests, recorded test setup (Test Proxy + `assets.json`), environment variables required by live tests, fixtures specific to this package.
+New generated operations do NOT automatically appear on the public surface in the
+shape users expect. For each new method, decide which exposure path applies:
 
-### 7. References table
+```bash
+# What new operations did regeneration add?
+git diff --name-only | grep "_operations\.py" | grep -v _patch
+git diff <path-to-generated-_operations.py> | grep -E '^\+\s+(async\s+)?def '
+```
 
-Link to `references/architecture.md` and `references/customizations.md`.
+Exposure paths (pick the one that applies to each new method):
+
+1. **Pass-through via generated mixin inheritance** — if the generated signature is
+   already user-friendly, the `_<Client>OperationsMixin` subclass in `_patch.py`
+   inherits it automatically. Only verify the method name does NOT collide with an
+   existing `_patch.py` override.
+
+2. **Override in the operations mixin** — if the method needs custom paging, custom
+   request building, response conversion, or error handling, add the override to
+   the `_<Client>OperationsMixin` class in the appropriate `_operations/_patch.py`
+   (and the async mirror). Typical triggers: custom `ItemPaged`, request-body
+   rewriting, `@search.*` field extraction, 413 batch splitting.
+
+3. **Polymorphic str-or-model wrapper** — for `delete_*` operations on a named
+   resource. Accept either a `str` name or the resource model; forward `e_tag` /
+   `match_condition` when the caller passes a model.
+
+4. **Create-or-update wrapper** — for `create_or_update_*` operations. Forward
+   `prefer="return=representation"`, `match_condition`, and `etag`; plus any
+   package-specific flags (e.g., `allow_index_downtime`, `skip_indexer_reset`,
+   `skip/disable cache`).
+
+5. **List projection wrapper** — for `list_*` operations that need a `select`
+   parameter, a name-only projection via `cls` callback, or a conversion from a
+   generated projection type back to the canonical model
+   (e.g., `_convert_<X>_response`).
+
+6. **Re-export via `__all__`** — any NEW public symbol defined or overridden in
+   `_patch.py` MUST be added to that file's `__all__`. Without this, `patch_sdk()`
+   will not surface it and the symbol will be missing from `from <ns> import *`
+   and from the `__init__.py` public API. Verify with:
+   ```bash
+   python -c "import <namespace>; print(sorted(<namespace>.__all__))"
+   ```
+
+Reminder: every sync exposure/wrapper needs a matching async mirror under `aio/`.
+Skip the categories above that do not apply to this package.
+
+### Step 5 — Check for Model/Enum Changes That Affect Customizations
+
+```bash
+git diff <path-to-generated-models-and-enums>
+```
+
+List what to watch for, tailored to the package (from Phase 0 scan):
+- Renamed enum values → backward-compat aliases in `_patch.py` reference old names
+- Changed model constructors → subclassed models in `_patch.py` may break
+- New fields on response models → extractor helpers need to be updated
+- Changed request models → builder helpers need to wire new parameters through
+
+### Step 6 — Ensure mypy pass
+
+```bash
+cd sdk/<service>/<package-name>
+azpysdk mypy
+```
+
+Mention what `mypy.ini` already ignores (typically generated internals).
+
+### Step 7 — Ensure pylint pass
+
+```bash
+cd sdk/<service>/<package-name>
+azpysdk pylint
+```
+
+Mention what `pylintrc` excludes (typically `_generated/`, `_vendor/`, `tests/`, `samples/`).
+
+### Step 8 — Update Documentation and Samples
+
+**CHANGELOG**:
+- Find the topmost `## (Unreleased)` section in `CHANGELOG.md`.
+- Add entries under `### Features Added`, `### Breaking Changes`, or `### Bugs Fixed`.
+- If no `(Unreleased)` section exists, create one above the latest release with the next version from `_version.py`.
+- Include a small example entry block.
+
+**README**:
+- Update usage examples for new client classes or operations.
+- Update Key Concepts for new resource types.
+- Update listed API version in Getting Started if it changed.
+
+### Customization Patterns Reference (inline)
+
+For each hand-written pattern that actually exists in the package (from Phase 0 scan),
+add a 2–5 sentence subsection naming the pattern and describing *what it does* and
+*what would break it*. Typical patterns:
+
+- Constructor reorder on a public client subclass
+- Custom paging (standard `ItemPaged` replaced with a custom iterator)
+- Hand-authored batching / buffered sender
+- Polymorphic delete / create-or-update pattern
+- Backward-compatible enum aliases (camelCase → UPPER_CASE)
+- Field builders
+- Monkey-patched staticmethod helpers
+- Wire-format encoding helpers (e.g., pipe-delimited parameters)
+
+Each subsection should point to the specific `_patch.py` it lives in and, where relevant,
+note: "Use `_patch.py` when TypeSpec cannot express the behavior, or when the behavior
+is Python-specific. For TypeSpec-level customizations (preferred when possible), see
+[typespec-python emitter docs](https://github.com/Azure/autorest.python/blob/main/packages/typespec-python/README.md)."
+
+### Pointer to `references/customizations.md`
+
+Single line / short paragraph telling the agent to read `references/customizations.md`
+for the exhaustive file-by-file inventory.
+
+## Required sections — Option B (reference manual)
+
+See `references/skill-template.md` *Option B* for the section list. Apply the same
+required content (tree of non-empty `_patch.py`, async parity reminder, import smoke
+tests, `ApiVersion` reconciliation, CHANGELOG/README step, per-pattern reference).
 
 ## Step 1 — Present
 
-Generate the full SKILL.md content and print it. Use the package profile to fill in package-specific details. Mark sections where domain expertise is needed with `<!-- TODO: Domain expert to fill in -->`.
+Generate the full SKILL.md content and print it. Fill in package-specific details from
+the Phase 0 profile. Mark anything you could not confirm with `<!-- TODO: Verify -->` or
+`<!-- TODO: Domain expert to fill in -->`.
 
 ## Step 2 — CONFIRM
 

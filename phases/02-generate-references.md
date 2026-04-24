@@ -2,38 +2,87 @@
 
 > 📍 **Phase 2 — Generate References** | Create supporting reference documents.
 
-## references/architecture.md
+Only two reference files are ever considered, and only one is required:
 
-Generate from the package scan. Include:
+| File | Required? | Purpose |
+|---|---|---|
+| `references/customizations.md` | **Required** if any `_patch.py` file is non-empty, or hand-written utility modules exist | File-by-file inventory of every non-empty `_patch.py` |
+| `references/architecture.md` | **Optional** | Only create if the layout is complex enough that a tree diagram inline in SKILL.md is insufficient |
 
-- **Repository layout** — directory tree with generated/hand-written annotations (mark `_generated/` clearly; for inline layout, mark header-identified generated files)
-- **Namespace layout** — tree under `<namespace-root>/` showing top-level, `models/`, `operations/`, `aio/`, `aio/operations/`
-- **Code generation** — toolchain (TypeSpec emitter `@azure-tools/typespec-python` or autorest), `tsp-location.yaml` format and commit pin, or `swagger/README.md` for legacy autorest
-- **Generated vs custom** — table showing mechanism, location (`_generated/` directory OR header comment), when to use which
-- **Public client types** — all sync/async client classes with file locations and their purpose
-- **API version management** — where the version enum lives, how `_patch.py` (if any) interacts with it
-- **Key supporting files** — table of important files (policies, helpers, `_serialization.py`, `_vendor.py`, etc.) and their purpose
-- **Dependencies** — key runtime deps from `pyproject.toml`/`setup.py` (e.g., `azure-core`, `isodate`, `typing-extensions`) and dev/test deps
-- **Build / test / lint commands** — reference the MCP tools or `azpysdk` entry points; do not duplicate commands already in `doc/tool_usage_guide.md`
+Packages like `azure-search-documents` intentionally ship with `customizations.md` only — the layout fits comfortably inline in SKILL.md.
 
-**Important**: Only include information that is accurate based on scanning the actual code. Mark anything uncertain with `<!-- TODO: Verify -->`.
+## references/customizations.md (canonical format)
 
-## references/customizations.md (if any `_patch.py` file is non-empty, or hand-written utility modules exist)
+Use one **section per non-empty `_patch.py` file**, in this structure:
 
-Generate from reading the actual customization files. For each non-empty `_patch.py` and for each hand-written utility module:
+```
+## File: `<path>/_patch.py`
 
-- **Problem**: What issue does this customization solve?
-- **Solution**: What does it do (override, new method, type wrapping, policy, etc.)?
-- **When to update**: What changes in the generated code would break this?
-- **Code example**: A short, real snippet extracted from the file (not fabricated).
-- **Async counterpart**: For sync-level customizations, the matching file under `aio/` and its parity status.
+### Depends On (from generated code)
+- `<generated.module.Symbol>` as `<alias>` (base class / direct import)
+- ...
 
-Also include:
-- **Common Python customization patterns** — table (method override, new method, field transformation, `__all__` re-export, custom pipeline policy, credential wrapping, LRO/paging override)
-- **Adding a new customization** — pointer to `azsdk_customized_code_update` + the package-specific touchpoints (which `_patch.py`, which `__init__.py` to update, where to add the async mirror)
-- **Removing a customization** — how to unwind a patch cleanly (delete in `_patch.py`, remove from `__all__`, remove re-export from `__init__.py`, delete async mirror)
-- **Troubleshooting** — silent import failures (missing `__all__` entry), stale references to removed generated symbols, async/sync drift, double re-export conflicts
-- **Quick-reference checklist** — post-regeneration verification steps (run `azsdk_package_run_check`, verify async parity, verify public API shape via `__init__.py` diff)
+### Defines
+| Symbol | Type | What It Does |
+|--------|------|-------------|
+| `<Name>` | class / function / constant | <one line> |
+| ...    | ...   | ...            |
+
+### After Regeneration, Verify
+- [ ] <specific check, e.g., base class constructor signature unchanged>
+- [ ] <specific check, e.g., generated enum member names still match the alias right-hand sides>
+- [ ] ...
+```
+
+If the file imports shared helpers from the sync partner instead of duplicating them,
+add an **Imports From Sync (NOT Duplicated)** subsection listing the symbols.
+
+For each polymorphic-wrapper mixin or multi-method class, use a nested table of
+`Method | Customization`.
+
+End the file with a section listing **Empty `_patch.py` Files (No Customizations)** —
+just file paths, to tell the agent "no action needed after regeneration" for these.
+
+### Extraction rules
+
+- Read the actual `_patch.py` files. Extract imports, class names, function names,
+  method names, and monkey-patched assignments (e.g., `X.Foo = Y.FOO`).
+- Use real snippets — do not fabricate code.
+- For each `Defines` row, the "What It Does" cell MUST be grounded in the actual source.
+- For each `After Regeneration, Verify` checkbox, pick the specific generated symbol
+  whose change would break this `_patch.py` — list that symbol by name.
+- Do NOT include version numbers, current default API version values, or release-specific info.
+
+### Patterns worth calling out (when they exist)
+
+If any of these patterns appear in the package, each MUST be documented:
+
+- Constructor reorder / parameter swap on a public client subclass
+- Custom paging (replacement of `ItemPaged` / `AsyncItemPaged`)
+- Hand-authored batching / buffered sender (not generated at all)
+- Polymorphic delete / create-or-update taking str or model object
+- Backward-compatible enum aliases (assignment statements like `E.Foo = E.FOO`)
+- Monkey-patched staticmethod (e.g., `E.Collection = staticmethod(Collection)`)
+- Field builders (e.g., `SimpleField`, `SearchableField`, `ComplexField`)
+- Response-model conversion helpers (e.g., `_convert_*_response`)
+- Request-model builder helpers (e.g., `_build_*_request`)
+- Continuation-token pack / unpack helpers
+
+## references/architecture.md (optional)
+
+Only create this file when the layout is complex enough that a tree diagram inline in SKILL.md is insufficient.
+
+If you do create it, include:
+
+- **Repository layout** — directory tree with generated/hand-written annotations
+- **Namespace layout** — tree under `<namespace-root>/`
+- **Code generation** — toolchain (TypeSpec `@azure-tools/typespec-python` or autorest), `tsp-location.yaml` format, `_metadata.json`
+- **Generated vs custom** — table with how to identify each
+- **Public client types** — sync/async client classes and file locations
+- **API version management** — where the version enum lives, how `_patch.py` interacts with it
+- **Key supporting files** — policies, helpers, `mypy.ini`, `assets.json`, etc.
+- **Dependencies** — key runtime / dev / test deps
+- **Build / test / lint** — MCP tools and `azpysdk` entry points (not full command re-documentation)
 
 ## Step 1 — Present
 

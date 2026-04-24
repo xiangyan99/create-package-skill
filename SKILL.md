@@ -30,8 +30,8 @@ Run each phase in order. **Progressive loading:** Read only the current phase fi
 | Phase | Description | Instructions |
 |---|---|---|
 | **Phase 0** | 🧭 Scan Package — detect architecture, customizations, key files | [phases/00-scan-package.md](phases/00-scan-package.md) |
-| **Phase 1** | 📝 Scaffold SKILL.md — generate skill with common pitfalls, architecture, workflow | [phases/01-scaffold-skill.md](phases/01-scaffold-skill.md) |
-| **Phase 2** | 📚 Generate References — create architecture.md and customizations.md | [phases/02-generate-references.md](phases/02-generate-references.md) |
+| **Phase 1** | 📝 Scaffold SKILL.md — generate skill with step-by-step post-regen workflow (Option A) or reference-manual structure (Option B) | [phases/01-scaffold-skill.md](phases/01-scaffold-skill.md) |
+| **Phase 2** | 📚 Generate References — create customizations.md (required) and optionally architecture.md | [phases/02-generate-references.md](phases/02-generate-references.md) |
 | **Phase 3** | Validate -- run vally lint | [phases/03-validate.md](phases/03-validate.md) |
 | **Phase 4** | 📋 Register — add to find-package-skill table | [phases/04-register.md](phases/04-register.md) |
 
@@ -45,9 +45,9 @@ Run each phase in order. **Progressive loading:** Read only the current phase fi
 
 **Relationship to existing SDK tools:**
 - Package skills **complement** the Azure SDK MCP tools (`azsdk_package_generate_code`, `azsdk_package_build_code`, `azsdk_customized_code_update`, etc.) — they do NOT replace them.
-- MCP tools handle deterministic operations (generate, build, test). Package skills provide the reasoning context an agent needs to use those tools correctly for a specific package.
-- Never redefine how generation, building, or testing works — reference the existing tools instead (e.g., "Run `tsp-client update` or `azsdk_package_generate_code`", not custom generation steps).
-- If a workflow step is already handled by an MCP tool or shared skill, just reference it — don't re-document it.
+- MCP tools handle deterministic operations (generate, build, test). Package skills provide the reasoning context an agent needs to use those tools correctly for a specific package, plus the package-specific verification commands the tools do not know about.
+- Reference the existing tools for the overall workflow (e.g., "Run `tsp-client update` or `azsdk_package_generate_code`"), but DO include the copy-pasteable verification commands an agent needs: import smoke tests (`python -c "from ... import ..."`), `ApiVersion` reconciliation (`grep`, `python -c "import json; ..."`), diff commands (`git diff --name-only | grep ...`), and lint invocations (`azpysdk mypy`, `azpysdk pylint`).
+- Never paraphrase an MCP tool's entire contract. Do include the one-line invocations the agent will run.
 
 **Structure:**
 - Skill directory: `sdk/<service>/<package-name>/.github/skills/<package-name>/`
@@ -66,11 +66,14 @@ Our eval showed that skill **structure** matters more than **volume**:
 
 | Pattern | Impact |
 |---|---|
-| "Common Pitfalls" section at the TOP | Agent reads pitfalls before analyzing errors → correct diagnosis |
+| Numbered step-by-step post-regen workflow (Option A) | Agent executes verification top-to-bottom without inventing steps |
+| Copy-pasteable verification commands (import smoke tests, `ApiVersion` reconciliation, git diff of generated operations/models) | Agent actually runs the checks instead of guessing whether customizations still work |
+| "Expose new generated methods through `_patch.py`" step (mixin inheritance / override / polymorphic / create-or-update / list / `__all__` re-export) | Agent wires new generated operations into the public surface instead of leaving them unreachable |
 | "Check `_patch.py` FIRST" directives | Changes agent default from "fix the error location" to "check the customization layer" |
-| Error categorization tables | Gives agent a decision framework, not just procedures |
+| Per-file `Depends On` / `Defines` / `After Regeneration, Verify` inventory in `customizations.md` | Agent can pinpoint exactly which generated symbol a breakage maps to |
 | Generated-file detection guidance (directory OR header comment) | Agent correctly identifies auto-generated files under both `_generated/` and inline layouts |
 | Async parity checklist | Agent remembers to mirror sync changes into `aio/` |
+| CHANGELOG / README update step | Prevents "silent" releases that ship new operations without docs |
 
 ## References (load on demand)
 
